@@ -1,0 +1,107 @@
+import requests
+import re
+import time
+
+# === CONFIGURATION ===
+API_KEY = 'your_zotero_api_key_here'       # Replace with your Zotero API key
+USER_ID = 'your_zotero_user_id_here'       # Replace with your numeric Zotero user ID, found here https://www.zotero.org/settings/keys
+BASE_URL = f'https://api.zotero.org/users/{USER_ID}/items'
+HEADERS = {'Zotero-API-Key': API_KEY}
+LIMIT = 100
+ALLOWED_TYPES = {'book', 'journalArticle', 'conferencePaper', 'bookSection} #These are what needs to be done in sentence case according to APA7th. 
+
+# === Known acronyms to preserve ===
+ACRONYMS = {'ELT', 'TBLT', 'NASA', 'AI', 'UN', 'EU'}
+
+# === Proper nouns to preserve ===
+# these are some of the proper names that appear in my references,you need to add yours
+PROPER_NOUNS = {
+    'france', 'paris', 'japan', 'tokyo', 'new york',
+    'germany', 'berlin', 'italy', 'rome', 'china',
+    'beijing', 'india', 'delhi', 'united states', 'london'
+}
+
+# === Sentence case function with acronym + proper noun handling ===
+def to_sentence_case(title):
+    if not title:
+        return title
+
+    original_title = title
+
+    # Step 1: Mask acronyms
+    acronym_map = {}
+    for acronym in ACRONYMS:
+        pattern = re.compile(r'\b' + re.escape(acronym) + r'\b', re.IGNORECASE)
+        placeholder = f'__ACRONYM_{acronym}__'
+        title = pattern.sub(placeholder, title)
+        acronym_map[placeholder] = acronym
+
+    # Step 2: Lowercase and capitalize first word
+    title = title.strip().lower()
+    title = title[0].upper() + title[1:]
+
+    # Step 3: Capitalize first word after colon
+    title = re.sub(r'(:\s*)(\w)', lambda m: m.group(1) + m.group(2).upper(), title)
+
+    # Step 4: Restore proper nouns
+    for noun in PROPER_NOUNS:
+        pattern = re.compile(r'\b' + re.escape(noun) + r'\b', re.IGNORECASE)
+        capitalized = ' '.join(word.capitalize() for word in noun.split())
+        title = pattern.sub(capitalized, title)
+
+    # Step 5: Restore acronyms
+    for placeholder, acronym in acronym_map.items():
+        title = title.replace(placeholder, acronym)
+
+    return title
+
+# === Main loop to fetch and process Zotero items ===
+start = 0
+while True:
+    print(f"\n🔄 Fetching items {start} to {start + LIMIT - 1}...")
+    params = {'format': 'json', 'limit': LIMIT, 'start': start}
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+
+    if response.status_code != 200:
+        print(f"❌ Error: {response.status_code} - {response.text}")
+        break
+
+    items = response.json()
+    if not items:
+        print("✅ All items processed.")
+        break
+
+    for item in items:
+        data = item['data']
+        item_type = data.get('itemType')
+        old_title = data.get('title', '')
+
+        # Skip attachments and unsupported types
+        if item_type == 'attachment' or item_type not in ALLOWED_TYPES:
+            continue
+
+        # Apply sentence casing
+        new_title = to_sentence_case(old_title)
+
+        if new_title != old_title:
+            print(f"\n🔧 Updating item {item['key']}")
+            print(f"Old title: {old_title}")
+            print(f"New title: {new_title}")
+
+            # Only update the title; leave other fields untouched
+            data['title'] = new_title
+            item_url = f"{BASE_URL}/{item['key']}"
+            update_headers = {
+                **HEADERS,
+                'If-Unmodified-Since-Version': str(item['version'])
+            }
+
+            update = requests.put(item_url, headers=update_headers, json={'data': data})
+            if update.status_code == 204:
+                print("✅ Title updated.")
+            else:
+                print(f"❌ Failed to update: {update.status_code} - {update.text}")
+
+        time.sleep(0.1)  # Be polite to Zotero's API
+
+    start += LIMIT
