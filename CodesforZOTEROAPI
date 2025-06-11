@@ -7,8 +7,9 @@ API_KEY = 'your_zotero_api_key_here'       # Replace with your Zotero API key
 USER_ID = 'your_zotero_user_id_here'       # Replace with your numeric Zotero user ID, found here https://www.zotero.org/settings/keys
 BASE_URL = f'https://api.zotero.org/users/{USER_ID}/items'
 HEADERS = {'Zotero-API-Key': API_KEY}
-LIMIT = 100
-ALLOWED_TYPES = {'book', 'journalArticle', 'conferencePaper', 'bookSection} #These are what needs to be done in sentence case according to APA7th. 
+LIMIT = 100 # Max per page
+#These are what needs to be done in sentence case according to APA7th. 
+ALLOWED_TYPES = {'book', 'journalArticle', 'conferencePaper', 'bookSection} 
 
 # === Known acronyms to preserve ===
 ACRONYMS = {'ELT', 'TBLT', 'NASA', 'AI', 'UN', 'EU'}
